@@ -1,0 +1,79 @@
+
+
+ .import os
+import re
+import pandas as pd
+from bs4 import BeautifulSoup
+
+# ✅ Path to your folder containing HTML files
+HTML_DIR = "/home/misp/Downloads/data"
+
+# List to hold extracted feature data
+data = []
+
+# Common suspicious phishing-related keywords
+SUSPICIOUS_WORDS = [
+    'login', 'verify', 'account', 'bank', 'secure',
+    'password', 'update', 'signin', 'confirm', 'paypal',
+    'reset', 'authentication', 'credential'
+]
+
+# -------------------------
+# Function: Extract features from each HTML file
+# -------------------------
+def extract_features_from_html(html_content):
+    soup = BeautifulSoup(html_content, "html.parser")
+    html_text = soup.get_text(separator=' ').lower()
+
+    html_length = len(html_content)
+    num_links = len(soup.find_all('a'))
+    num_forms = len(soup.find_all('form'))
+    num_scripts = len(soup.find_all('script'))
+    num_iframes = len(soup.find_all('iframe'))
+    num_inputs = len(soup.find_all('input'))
+
+    suspicious_word_count = sum(html_text.count(word) for word in SUSPICIOUS_WORDS)
+    has_login_form = 1 if soup.find('form', {'action': re.compile(r'login|signin', re.I)}) else 0
+    has_onload_event = 1 if re.search(r'onload=', html_content, re.I) else 0
+    has_js_redirect = 1 if re.search(r'window\.location|window\.open', html_content, re.I) else 0
+
+    return {
+        'html_length': html_length,
+        'num_links': num_links,
+        'num_forms': num_forms,
+        'num_scripts': num_scripts,
+        'num_iframes': num_iframes,
+        'num_inputs': num_inputs,
+        'suspicious_word_count': suspicious_word_count,
+        'has_login_form': has_login_form,
+        'has_onload_event': has_onload_event,
+        'has_js_redirect': has_js_redirect
+    }
+
+# -------------------------
+# Loop over all HTML files in your dataset
+# -------------------------
+print(f"🔍 Scanning directory: {HTML_DIR}")
+for file in os.listdir(HTML_DIR):
+    if file.endswith(".html") or file.endswith(".htm"):
+        file_path = os.path.join(HTML_DIR, file)
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                html_content = f.read()
+                features = extract_features_from_html(html_content)
+                features['filename'] = file
+                data.append(features)
+        except Exception as e:
+            print(f"⚠️ Error reading {file}: {e}")
+
+# -------------------------
+# Save extracted features to CSV
+# -------------------------
+if data:
+    df = pd.DataFrame(data)
+    output_path = os.path.join(HTML_DIR, "phishing_features.csv")
+    df.to_csv(output_path, index=False)
+    print(f"\n✅ Done! Extracted {len(df)} records.")
+    print(f"📁 Saved feature dataset to: {output_path}")
+else:
+    print("❌ No HTML files found or failed to extract features.")
